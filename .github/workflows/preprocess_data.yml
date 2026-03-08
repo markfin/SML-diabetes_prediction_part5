@@ -1,0 +1,40 @@
+name: Data Preprocessing Workflow
+
+on:
+  push:
+    branches:
+      - main # or master, or specific branches
+  workflow_dispatch: # Allows manual triggering
+
+jobs:
+  preprocess_data_job:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.9' # Specify your Python version
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pandas numpy requests scikit-learn # Add other dependencies as needed
+
+    - name: Copy preprocessing script and module to working directory
+      # In a real GitHub Action, these files would be part of your repository.
+      # For this Colab simulation, we assume they are copied or available.
+      # This step is illustrative as GitHub Actions cannot directly access Google Drive.
+      run: |
+        mkdir -p .github/workflows
+        cp "/content/drive/MyDrive/Colab Notebooks/Demo9/run_preprocessing.py" .
+        cp "/content/drive/MyDrive/Colab Notebooks/Demo9/automate_Muhammad-Zamaruddin.py" .
+
+    - name: Run data preprocessing script
+      # This assumes run_preprocessing.py is now in the current working directory
+      run: python run_preprocessing.py
+
+    # Further steps could involve committing preprocessed data, uploading as artifact, etc.
