@@ -1,0 +1,92 @@
+name: MLflow Model Training CI
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      branch_name:
+        description: 'Branch to run on (e.g., main)'
+        required: false
+        default: 'main'
+
+jobs:
+  train-and-track-model:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch_name || github.ref }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Miniconda
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          python-version: '3.9' # Should match the conda.yaml
+          auto-activate-base: false
+          miniforge-version: latest
+          miniforge-variant: Mambaforge
+          activate-environment: diabetes-prediction-env # Activate the environment defined in conda.yaml
+
+      - name: Install MLflow if not in environment
+        shell: bash -l {0}
+        run: |
+          # Ensure MLflow is available for the CLI in the activated environment
+          if ! command -v mlflow &> /dev/null
+          then
+              echo "mlflow not found, installing..."
+              conda install -n diabetes-prediction-env mlflow=2.13.2 -y || pip install mlflow==2.13.2
+          else
+              echo "mlflow already installed."
+          fi
+
+      - name: Clean up mlruns directory on runner if it exists
+        run: |
+          # mlruns will be created inside MLProject by mlflow run .
+          if [ -d "MLProject/mlruns" ]; then
+            echo "Deleting existing MLProject/mlruns directory on runner..."
+            rm -rf MLProject/mlruns
+          else
+            echo "MLProject/mlruns directory does not exist on runner, no cleanup needed."
+          fi
+
+      - name: Create Workflow-CI.txt
+        run: |
+          # Create Workflow-CI.txt relative to the repository root
+          echo "GitHub Repository: https://github.com/markfin/Workflow_CI.git" > Workflow-CI.txt
+          echo "Workflow-CI.txt created."
+
+      - name: Update .gitignore to ignore mlruns and .db files
+        run: |
+          # Update .gitignore relative to the repository root
+          echo "/mlruns/" >> .gitignore
+          echo "*.db" >> .gitignore
+          echo ".gitignore updated."
+
+      - name: Run MLflow Project
+        shell: bash -l {0}
+        run: |
+          cd MLProject # Navigate to the MLProject directory
+          mlflow run . # Run the MLflow project defined in MLProject/MLproject
+          echo "MLflow run completed. Local mlruns folder created."
+
+      - name: Configure Git
+        run: |
+          git config user.name "markfin"
+          git config user.email "marfinzamaruddin@gmail.com"
+
+      - name: Commit and Push changes
+        run: |
+          # Add the workflow file, Workflow-CI.txt, and .gitignore.
+          # MLProject/mlruns/ will be ignored due to .gitignore.
+          git add .github/workflows/model_training_ci.yml Workflow-CI.txt .gitignore
+          if ! git diff-index --quiet HEAD; then
+            git commit -m "CI: MLflow model re-training workflow, Workflow-CI.txt, and .gitignore"
+            git push origin ${{ github.event.inputs.branch_name || github.ref }}
+            echo "Changes committed and pushed."
+          else
+            echo "No changes detected to commit."
+          fi
